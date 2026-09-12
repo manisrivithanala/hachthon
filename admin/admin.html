@@ -25,7 +25,7 @@
 
     <style>
         /* ═══════════════════════════════════════════════════════
-           ADMIN PANEL v2.3 — Dual-mode (backend + offline)
+           ADMIN PANEL v3.0 — Frontend-only (offline)
            ═══════════════════════════════════════════════════════ */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
 
@@ -1304,9 +1304,6 @@
             .health-ring-wrapper { flex-direction: column; }
         }
     </style>
-
-    <!-- ★ api.js — bridges frontend <-> backend -->
-    <script src="../js/api.js"></script>
 </head>
 <body>
 
@@ -2289,8 +2286,8 @@
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   SKILLINTEL · SUPER ADMIN PANEL v2.3
-   Dual-mode: Works with OR without backend
+   SKILLINTEL · SUPER ADMIN PANEL v3.0
+   Pure frontend-only — no backend, no API calls, no fetch
    ═══════════════════════════════════════════════════════════════ */
 
 const ADMIN_CREDENTIALS = {
@@ -2305,131 +2302,45 @@ const GOVT_STORAGE_KEY = 'govtOfficials';
 const GOVT_ACTIVITY_KEY = 'govtActivityLog';
 
 /* ═══════════════════════════════════════════════════════════════
-   LOGIN — Works with OR without backend
+   LOGIN — Pure frontend verification
    ═══════════════════════════════════════════════════════════════ */
-async function adminLogin() {
+function adminLogin() {
     const user = document.getElementById('adminUser').value.trim();
     const pass = document.getElementById('adminPass').value;
     const errorBox = document.getElementById('loginError');
     const errorText = document.getElementById('loginErrorText');
 
-    // ── Validate input ──
     if (!user || !pass) {
         errorText.textContent = 'Please enter both username and password.';
         errorBox.classList.add('show');
         return;
     }
 
-    // ── Lock the button ──
-    const btn = document.querySelector('.admin-login-card .login-btn');
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating…';
-
-    let backendReachable = false;
-
-    // ─────────────────────────────────────────────────────────
-    // STEP 1: Try backend first
-    // ─────────────────────────────────────────────────────────
-    if (typeof apiCall === 'function') {
+    // Frontend-only verification against hardcoded credentials
+    if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
         try {
-            const { ok, status, data } = await apiCall('/api/auth/login', {
-                method: 'POST',
-                body: { username: user, password: pass }
-            });
+            sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+                username: user,
+                full_name: ADMIN_CREDENTIALS.displayName,
+                role: 'super_admin',
+                loginAt: new Date().toISOString()
+            }));
+        } catch (e) {}
 
-            // Backend responded → it's reachable
-            backendReachable = true;
-
-            // ── SUCCESS ──
-            if (ok && data && ['super_admin', 'admin', 'verifier'].includes(data.role)) {
-                try {
-                    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
-                        username: data.username,
-                        full_name: data.full_name,
-                        role: data.role,
-                        loginAt: new Date().toISOString()
-                    }));
-                } catch (e) {}
-
-                logAudit('Admin Login', 'Successful login via backend');
-                logActivity('Admin logged in (backend)', 'success');
-                showPanel();
-                toast(`Welcome back, ${data.full_name || data.username}!`, 'success');
-
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-                return;
-            }
-
-            // ── Backend rejected (401/403) ──
-            if (status === 401 || status === 403) {
-                errorText.textContent = (data && data.error) || 'Invalid credentials.';
-                errorBox.classList.add('show');
-                setTimeout(() => errorBox.classList.remove('show'), 3000);
-                logSecurityEvent('Failed admin login (backend)', `user=${user}`);
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-                return;
-            }
-
-            // ── Backend returned unexpected data (e.g. 404 with a role) ──
-            if (ok && data && data.role && !['super_admin', 'admin', 'verifier'].includes(data.role)) {
-                errorText.textContent = 'This account is not an admin.';
-                errorBox.classList.add('show');
-                setTimeout(() => errorBox.classList.remove('show'), 3000);
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-                return;
-            }
-
-            // ── Backend returned 404 / 500 / etc. → treat as offline ──
-            console.warn('Backend returned unexpected status:', status, data);
-            backendReachable = false;
-
-        } catch (err) {
-            console.warn('Backend unreachable, using offline check:', err);
-            backendReachable = false;
-        }
+        logAudit('Admin Login', 'Successful login');
+        logActivity('Admin logged in', 'success');
+        showPanel();
+        toast(`Welcome back, ${ADMIN_CREDENTIALS.displayName}!`, 'success');
+    } else {
+        logSecurityEvent('Failed admin login attempt', `Username: ${user}`);
+        errorText.textContent = 'Invalid admin credentials. Please try again.';
+        errorBox.classList.add('show');
+        setTimeout(() => errorBox.classList.remove('show'), 3000);
     }
-
-    // ─────────────────────────────────────────────────────────
-    // STEP 2: OFFLINE FALLBACK
-    // ─────────────────────────────────────────────────────────
-    if (!backendReachable) {
-        if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
-            try {
-                sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
-                    username: user,
-                    full_name: ADMIN_CREDENTIALS.displayName,
-                    role: 'super_admin',
-                    loginAt: new Date().toISOString()
-                }));
-            } catch (e) {}
-
-            logAudit('Admin Login', 'Successful login (offline fallback)');
-            logActivity('Admin logged in (offline mode)', 'success');
-            showPanel();
-            toast(`Welcome back, ${ADMIN_CREDENTIALS.displayName}! (offline)`, 'success');
-        } else {
-            logSecurityEvent('Failed admin login attempt', `Username: ${user}`);
-            errorText.textContent = 'Invalid admin credentials. Please try again.';
-            errorBox.classList.add('show');
-            setTimeout(() => errorBox.classList.remove('show'), 3000);
-        }
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = originalHtml;
 }
 
 function adminLogout() {
     if (!confirm('Are you sure you want to logout?')) return;
-    try {
-        if (typeof apiCall === 'function') {
-            apiCall('/api/auth/logout', { method: 'POST' }).catch(() => {});
-        }
-    } catch (e) {}
     logActivity('Admin logged out', 'info');
     try { sessionStorage.removeItem(ADMIN_SESSION_KEY); } catch (e) {}
     location.reload();
@@ -2517,7 +2428,6 @@ function initPanel() {
     renderActivityFeed();
     renderGovtOfficials();
     renderGovtActivityLog();
-    loadGovtOfficialsFromBackend();  // fetch fresh from server if online
     updateCounts();
     updateNotifBadge();
     updateThemeIcon();
@@ -2574,7 +2484,7 @@ function switchModule(module) {
         outcomes: renderOutcomes,
         verify: renderPending,
         ai: renderAIInsights,
-        govtAccess: () => { renderGovtOfficials(); renderGovtActivityLog(); loadGovtOfficialsFromBackend(); },
+        govtAccess: () => { renderGovtOfficials(); renderGovtActivityLog(); },
         passwords: renderPasswordReset,
         audit: renderAuditLogs,
         security: renderSecurityLogs,
@@ -3504,8 +3414,7 @@ function openAddGovtOfficialModal() {
     `);
 }
 
-/* Dual-mode: backend-first, localStorage fallback */
-async function saveGovtOfficial() {
+function saveGovtOfficial() {
     const fullName = document.getElementById('govtFullName').value.trim();
     const officialId = document.getElementById('govtOfficialId').value.trim();
     const email = document.getElementById('govtEmailInput').value.trim();
@@ -3525,71 +3434,26 @@ async function saveGovtOfficial() {
         return;
     }
 
-    // Try backend first
-    if (typeof apiCall === 'function') {
-        try {
-            const { ok, status, data } = await apiCall('/api/admin/govt-officials', {
-                method: 'POST',
-                body: {
-                    officialId, fullName, email, mobile, department,
-                    accessLevel, region, expiresAt, password
-                }
-            });
-
-            if (ok) {
-                logAudit('Added Govt Official (backend)', `${fullName} (${data.id || officialId})`);
-                logActivity(`Government official added: ${fullName}`, 'success');
-                logGovtActivity(`Created: ${fullName} · ${data.id || officialId} · ${accessLevel} level`, 'success');
-
-                closeModal();
-                await loadGovtOfficialsFromBackend();
-                renderGovtActivityLog();
-                updateCounts();
-                toast(`Official created: ${data.id || officialId}`, 'success');
-                return;
-            }
-
-            // Backend rejected
-            if (status === 401 || status === 403 || status === 409) {
-                toast((data && data.error) || 'Could not create official', 'error');
-                return;
-            }
-
-            // Anything else (404, 500, etc.) → fall through to offline
-            console.warn('Backend rejected or unavailable, using offline save:', status, data);
-        } catch (err) {
-            console.warn('Backend unreachable, saving to localStorage:', err);
-        }
-    }
-
-    // OFFLINE FALLBACK
-    saveGovtOfficialOffline({
-        fullName, officialId, email, mobile, department,
-        accessLevel, region, expiresAt, password
-    });
-}
-
-function saveGovtOfficialOffline(official) {
     const officials = getGovtOfficials();
-    if (officials.find(o => o.email.toLowerCase() === official.email.toLowerCase())) {
+    if (officials.find(o => o.email.toLowerCase() === email.toLowerCase())) {
         toast('An official with this email already exists', 'error');
         return;
     }
-    if (officials.find(o => o.officialId === official.officialId)) {
+    if (officials.find(o => o.officialId === officialId)) {
         toast('Official ID collision — try again', 'error');
         return;
     }
 
     const newOfficial = {
-        officialId: official.officialId || generateOfficialId(),
-        fullName: official.fullName,
-        email: official.email,
-        mobile: official.mobile || '',
-        department: official.department,
-        accessLevel: official.accessLevel || 'State',
-        region: official.region || '',
-        expiresAt: official.expiresAt,
-        password: official.password,
+        officialId: officialId || generateOfficialId(),
+        fullName: fullName,
+        email: email,
+        mobile: mobile || '',
+        department: department,
+        accessLevel: accessLevel || 'State',
+        region: region || '',
+        expiresAt: expiresAt,
+        password: password,
         status: 'active',
         createdAt: new Date().toISOString(),
         createdBy: ADMIN_CREDENTIALS.displayName,
@@ -3601,45 +3465,15 @@ function saveGovtOfficialOffline(official) {
     officials.push(newOfficial);
     saveGovtOfficials(officials);
 
-    logAudit('Added Govt Official (local)', `${official.fullName} (${newOfficial.officialId})`);
-    logActivity(`Government official added (offline): ${official.fullName}`, 'success');
-    logGovtActivity(`Created: ${official.fullName} · ${newOfficial.officialId} · ${official.accessLevel} level`, 'success');
+    logAudit('Added Govt Official', `${fullName} (${newOfficial.officialId})`);
+    logActivity(`Government official added: ${fullName}`, 'success');
+    logGovtActivity(`Created: ${fullName} · ${newOfficial.officialId} · ${accessLevel} level`, 'success');
 
     closeModal();
     renderGovtOfficials();
     renderGovtActivityLog();
     updateCounts();
-    toast(`Official created (offline): ${newOfficial.officialId}`, 'success');
-}
-
-async function loadGovtOfficialsFromBackend() {
-    if (typeof apiCall !== 'function') return;
-    try {
-        const { ok, data } = await apiCall('/api/admin/govt-officials');
-        if (ok && Array.isArray(data)) {
-            const mapped = data.map(o => ({
-                officialId: o.official_id,
-                fullName: o.full_name,
-                email: o.email,
-                mobile: o.mobile || '',
-                department: o.department,
-                accessLevel: o.access_level,
-                region: o.region || '',
-                status: o.status,
-                expiresAt: o.expires_at,
-                lastLogin: o.last_login,
-                loginCount: o.login_count || 0,
-                createdAt: o.created_at,
-                createdBy: o.created_by
-            }));
-            localStorage.setItem(GOVT_STORAGE_KEY, JSON.stringify(mapped));
-            renderGovtOfficials();
-            return mapped;
-        }
-    } catch (e) {
-        console.warn('Could not fetch officials from backend:', e);
-    }
-    return null;
+    toast(`Official created: ${newOfficial.officialId}`, 'success');
 }
 
 function viewGovtOfficial(officialId) {
