@@ -572,6 +572,10 @@
     }
     html[data-theme="dark"] .admin-modal .field-label { color: #94A3B8; }
 
+    /* Hide elements per step */
+    .admin-step { display: none; }
+    .admin-step.active { display: block; }
+
     @media (max-width: 992px) {
       .role-grid { grid-template-columns: repeat(2, 1fr); }
       .landing-container { padding: 2.5rem 2rem; border-radius: 2rem; }
@@ -703,36 +707,71 @@
 
 </main>
 
-<!-- ADMIN GATE MODAL (now backend-authenticated) -->
+<!-- ═══════════════════════════════════════════════════════
+     ADMIN GATE MODAL — TWO STEPS
+     Step 1: Passcode
+     Step 2: Username + Password
+     ═══════════════════════════════════════════════════════ -->
 <div class="admin-modal-overlay" id="adminOverlay" onclick="if(event.target===this)closeAdminGate()">
   <div class="admin-modal" id="adminModal">
-    <div class="modal-icon" id="adminModalIcon"><i class="fas fa-user-shield"></i></div>
-    <h3 id="adminModalTitle">Admin Access</h3>
-    <p id="adminModalText">Enter your admin credentials to continue.</p>
 
-    <div class="field-label">Username</div>
-    <input type="text"
-           id="adminUsernameInput"
-           placeholder="admin username"
-           autocomplete="username"
-           spellcheck="false" />
+    <!-- STEP 1: PASSCODE -->
+    <div class="admin-step active" id="adminStep1">
+      <div class="modal-icon" id="passcodeIcon"><i class="fas fa-lock"></i></div>
+      <h3 id="passcodeTitle">Admin Gate</h3>
+      <p id="passcodeText">Enter the admin passcode to unlock the next step.</p>
 
-    <div class="field-label">Password</div>
-    <input type="password"
-           id="adminPasswordInput"
-           placeholder="••••••••"
-           autocomplete="current-password"
-           onkeydown="if(event.key==='Enter')verifyAdminCredentials()" />
+      <div class="field-label">Passcode</div>
+      <input type="password"
+             id="adminPasscodeInput"
+             placeholder="••••"
+             maxlength="8"
+             autocomplete="off"
+             inputmode="numeric"
+             onkeydown="if(event.key==='Enter')verifyPasscode()" />
 
-    <div class="attempts-warning" id="adminAttemptsWarning"></div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeAdminGate()">
-        <i class="fas fa-times"></i> Cancel
-      </button>
-      <button class="btn-danger" id="adminSubmitBtn" onclick="verifyAdminCredentials()">
-        <i class="fas fa-unlock"></i> Unlock
-      </button>
+      <div class="attempts-warning" id="passcodeWarning"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeAdminGate()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+        <button class="btn-danger" id="passcodeSubmitBtn" onclick="verifyPasscode()">
+          <i class="fas fa-arrow-right"></i> Continue
+        </button>
+      </div>
     </div>
+
+    <!-- STEP 2: USERNAME + PASSWORD -->
+    <div class="admin-step" id="adminStep2">
+      <div class="modal-icon" id="adminModalIcon"><i class="fas fa-user-shield"></i></div>
+      <h3 id="adminModalTitle">Admin Credentials</h3>
+      <p id="adminModalText">Enter your admin username and password to continue.</p>
+
+      <div class="field-label">Username</div>
+      <input type="text"
+             id="adminUsernameInput"
+             placeholder="admin username"
+             autocomplete="username"
+             spellcheck="false" />
+
+      <div class="field-label">Password</div>
+      <input type="password"
+             id="adminPasswordInput"
+             placeholder="••••••••"
+             autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')verifyAdminCredentials()" />
+
+      <div class="attempts-warning" id="adminAttemptsWarning"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="backToPasscode()">
+          <i class="fas fa-arrow-left"></i> Back
+        </button>
+        <button class="btn-danger" id="adminSubmitBtn" onclick="verifyAdminCredentials()">
+          <i class="fas fa-unlock"></i> Unlock
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -746,10 +785,18 @@ const MAX_ATTEMPTS = 3;
 const LOCKOUT_MS = 30000;
 
 /* ═══════════════════════════════════════════════════════════════
+   HARDCODED CREDENTIALS
+   ═══════════════════════════════════════════════════════════════ */
+const ADMIN_PASSCODE = '1512';                              // Step 1 passcode
+const DEMO_ADMIN_USERNAME = 'vithanalamanisri@gmail.com';   // Step 2 username
+const DEMO_ADMIN_PASSWORD = 'vManisri@1512';                // Step 2 password
+
+/* ═══════════════════════════════════════════════════════════════
    STATE
    ═══════════════════════════════════════════════════════════════ */
 let adminAttempts = 0;
 let adminLockedUntil = 0;
+let passcodeAttempts = 0;
 
 try {
   adminAttempts = parseInt(sessionStorage.getItem('admin_attempts') || '0', 10);
@@ -757,7 +804,7 @@ try {
 } catch (e) {}
 
 /* ═══════════════════════════════════════════════════════════════
-   BACKEND HEALTH CHECK (replaces hardcoded "System Online")
+   BACKEND HEALTH CHECK
    ═══════════════════════════════════════════════════════════════ */
 async function checkBackendHealth() {
   const statusBadge = document.getElementById('statusBadge');
@@ -794,7 +841,7 @@ function openAdminGate() {
   overlay.classList.add('show');
 
   setTimeout(() => {
-    const input = document.getElementById('adminUsernameInput');
+    const input = document.getElementById('adminPasscodeInput');
     if (input) input.focus();
   }, 100);
 }
@@ -802,26 +849,45 @@ function openAdminGate() {
 function closeAdminGate() {
   const overlay = document.getElementById('adminOverlay');
   overlay.classList.remove('show');
-  ['adminUsernameInput', 'adminPasswordInput'].forEach(id => {
+  ['adminPasscodeInput', 'adminUsernameInput', 'adminPasswordInput'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  document.getElementById('passcodeWarning').textContent = '';
   document.getElementById('adminAttemptsWarning').textContent = '';
+  showStep(1);
 }
 
 function resetGateModal() {
+  // Reset to Step 1
+  showStep(1);
+
+  // Reset passcode step
+  const pIcon  = document.getElementById('passcodeIcon');
+  const pTitle = document.getElementById('passcodeTitle');
+  const pText  = document.getElementById('passcodeText');
+  const pBtn   = document.getElementById('passcodeSubmitBtn');
+  pIcon.className = 'modal-icon';
+  pIcon.innerHTML = '<i class="fas fa-lock"></i>';
+  pTitle.textContent = 'Admin Gate';
+  pText.textContent  = 'Enter the admin passcode to unlock the next step.';
+  pBtn.disabled = false;
+  pBtn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue';
+  const pInput = document.getElementById('adminPasscodeInput');
+  if (pInput) { pInput.value = ''; pInput.disabled = false; }
+  document.getElementById('passcodeWarning').textContent = '';
+
+  // Reset credentials step
   const icon  = document.getElementById('adminModalIcon');
   const title = document.getElementById('adminModalTitle');
   const text  = document.getElementById('adminModalText');
   const btn   = document.getElementById('adminSubmitBtn');
-
   icon.className = 'modal-icon';
   icon.innerHTML = '<i class="fas fa-user-shield"></i>';
-  title.textContent = 'Admin Access';
-  text.textContent  = 'Enter your admin credentials to continue.';
+  title.textContent = 'Admin Credentials';
+  text.textContent  = 'Enter your admin username and password to continue.';
   btn.disabled = false;
   btn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
-
   ['adminUsernameInput', 'adminPasswordInput'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; el.disabled = false; }
@@ -829,8 +895,77 @@ function resetGateModal() {
   document.getElementById('adminAttemptsWarning').textContent = '';
 }
 
+function showStep(n) {
+  document.getElementById('adminStep1').classList.toggle('active', n === 1);
+  document.getElementById('adminStep2').classList.toggle('active', n === 2);
+  setTimeout(() => {
+    const focusId = n === 1 ? 'adminPasscodeInput' : 'adminUsernameInput';
+    const el = document.getElementById(focusId);
+    if (el) el.focus();
+  }, 100);
+}
+
+function backToPasscode() {
+  document.getElementById('passcodeWarning').textContent = '';
+  const pInput = document.getElementById('adminPasscodeInput');
+  if (pInput) { pInput.value = ''; pInput.disabled = false; }
+  showStep(1);
+}
+
 /* ═══════════════════════════════════════════════════════════════
-   VERIFY CREDENTIALS VIA BACKEND
+   STEP 1: VERIFY PASSCODE
+   ═══════════════════════════════════════════════════════════════ */
+function verifyPasscode() {
+  const input = document.getElementById('adminPasscodeInput');
+  const warningEl = document.getElementById('passcodeWarning');
+  const btn = document.getElementById('passcodeSubmitBtn');
+  const entered = (input.value || '').trim();
+
+  if (!entered) {
+    warningEl.textContent = 'Please enter the passcode.';
+    return;
+  }
+
+  // Lock UI
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking…';
+  warningEl.textContent = '';
+
+  setTimeout(() => {
+    if (entered === ADMIN_PASSCODE) {
+      // ✅ Passcode correct → move to Step 2
+      const icon = document.getElementById('passcodeIcon');
+      icon.className = 'modal-icon success';
+      icon.innerHTML = '<i class="fas fa-check"></i>';
+      document.getElementById('passcodeTitle').textContent = 'Passcode Verified';
+      document.getElementById('passcodeText').textContent = 'Proceeding to credentials…';
+
+      logAdminAccess(`Passcode verified`);
+
+      setTimeout(() => {
+        showStep(2);
+      }, 500);
+    } else {
+      // ❌ Wrong passcode
+      passcodeAttempts++;
+      logSuspiciousAttempt(`Failed passcode attempt #${passcodeAttempts}`);
+      warningEl.textContent = `⚠ Incorrect passcode. ${MAX_ATTEMPTS - passcodeAttempts} attempt${(MAX_ATTEMPTS - passcodeAttempts) !== 1 ? 's' : ''} left.`;
+      input.value = '';
+      input.focus();
+      shakeModal();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-arrow-right"></i> Continue';
+
+      if (passcodeAttempts >= MAX_ATTEMPTS) {
+        closeAdminGate();
+        showIntrusionAlert();
+      }
+    }
+  }, 300);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 2: VERIFY USERNAME + PASSWORD
    ═══════════════════════════════════════════════════════════════ */
 async function verifyAdminCredentials() {
   const now = Date.now();
@@ -858,6 +993,8 @@ async function verifyAdminCredentials() {
   submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying…';
   warningEl.textContent = '';
 
+  let handledByBackend = false;
+
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
@@ -866,88 +1003,126 @@ async function verifyAdminCredentials() {
       body: JSON.stringify({ username, password })
     });
 
-    const data = await res.json().catch(() => ({}));
+    // If backend actually responds (not a 404/500), treat as reachable
+    if (res.status !== 404 && res.status !== 500 && res.status !== 502 && res.status !== 503) {
+      handledByBackend = true;
+      const data = await res.json().catch(() => ({}));
 
-    // ── SUCCESS ──
-    if (res.ok && data.role) {
-      const allowedRoles = ['super_admin', 'admin', 'verifier'];
-      if (!allowedRoles.includes(data.role)) {
-        warningEl.textContent = 'This account is not an admin. Access denied.';
-        logSuspiciousAttempt(`Non-admin role tried to access: ${data.role}`);
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
-        passwordEl.value = '';
+      // ── SUCCESS from backend ──
+      if (res.ok && data.role) {
+        const allowedRoles = ['super_admin', 'admin', 'verifier'];
+        if (!allowedRoles.includes(data.role)) {
+          warningEl.textContent = 'This account is not an admin. Access denied.';
+          logSuspiciousAttempt(`Non-admin role tried to access: ${data.role}`);
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
+          passwordEl.value = '';
+          return;
+        }
+
+        adminAttempts = 0;
+        try { sessionStorage.setItem('admin_attempts', '0'); } catch (e) {}
+
+        const icon = document.getElementById('adminModalIcon');
+        icon.className = 'modal-icon success';
+        icon.innerHTML = '<i class="fas fa-check"></i>';
+        document.getElementById('adminModalTitle').textContent = 'Access Granted';
+        document.getElementById('adminModalText').textContent =
+          `Welcome ${data.full_name || data.username}. Redirecting…`;
+
+        logAdminAccess(`Admin login (backend): ${data.username} (${data.role})`);
+
+        setTimeout(() => {
+          window.location.href = ADMIN_PANEL_PATH;
+        }, 900);
         return;
       }
 
-      adminAttempts = 0;
-      try { sessionStorage.setItem('admin_attempts', '0'); } catch (e) {}
+      // ── FAILURE from backend (401/403) ──
+      if (res.status === 401 || res.status === 403) {
+        adminAttempts++;
+        try { sessionStorage.setItem('admin_attempts', String(adminAttempts)); } catch (e) {}
 
-      const icon = document.getElementById('adminModalIcon');
-      icon.className = 'modal-icon success';
-      icon.innerHTML = '<i class="fas fa-check"></i>';
-      document.getElementById('adminModalTitle').textContent = 'Access Granted';
-      document.getElementById('adminModalText').textContent =
-        `Welcome ${data.full_name || data.username}. Redirecting…`;
+        const remaining = MAX_ATTEMPTS - adminAttempts;
+        logSuspiciousAttempt(`Failed admin attempt #${adminAttempts} (user: ${username})`);
 
-      logAdminAccess(`Admin login: ${data.username} (${data.role})`);
+        if (adminAttempts >= MAX_ATTEMPTS) {
+          adminLockedUntil = now + LOCKOUT_MS;
+          try { sessionStorage.setItem('admin_locked_until', String(adminLockedUntil)); } catch (e) {}
+          showIntrusionAlert();
+          showLockedModal(Math.ceil(LOCKOUT_MS / 1000));
+          return;
+        }
 
-      setTimeout(() => {
-        window.location.href = ADMIN_PANEL_PATH;
-      }, 900);
-      return;
+        warningEl.textContent = data.error
+          ? `⚠ ${data.error}. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`
+          : `⚠ Invalid credentials. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`;
+
+        passwordEl.value = '';
+        passwordEl.focus();
+        shakeModal();
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
+        return;
+      }
     }
-
-    // ── FAILURE ──
-    adminAttempts++;
-    try { sessionStorage.setItem('admin_attempts', String(adminAttempts)); } catch (e) {}
-
-    const remaining = MAX_ATTEMPTS - adminAttempts;
-    logSuspiciousAttempt(`Failed admin attempt #${adminAttempts} (user: ${username})`);
-
-    if (adminAttempts >= MAX_ATTEMPTS) {
-      adminLockedUntil = now + LOCKOUT_MS;
-      try { sessionStorage.setItem('admin_locked_until', String(adminLockedUntil)); } catch (e) {}
-      showIntrusionAlert();
-      showLockedModal(Math.ceil(LOCKOUT_MS / 1000));
-      return;
-    }
-
-    warningEl.textContent = data.error
-      ? `⚠ ${data.error}. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`
-      : `⚠ Invalid credentials. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`;
-
-    passwordEl.value = '';
-    passwordEl.focus();
-    shakeModal();
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
-
   } catch (networkErr) {
-    // Backend unreachable → fall back to demo mode with passcode
-    warningEl.innerHTML = '<i class="fas fa-wifi"></i> Backend offline — using demo passcode.';
-
-    // Demo fallback: allow 1512 only
-    if (password === '1512' && username === 'superadmin') {
-      adminAttempts = 0;
-      const icon = document.getElementById('adminModalIcon');
-      icon.className = 'modal-icon success';
-      icon.innerHTML = '<i class="fas fa-check"></i>';
-      document.getElementById('adminModalTitle').textContent = 'Demo Access Granted';
-      document.getElementById('adminModalText').textContent = 'Backend offline. Redirecting to demo admin…';
-      setTimeout(() => { window.location.href = ADMIN_PANEL_PATH; }, 900);
-      return;
-    }
-
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
+    // Backend unreachable → fall through to offline mode
+    handledByBackend = false;
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // OFFLINE FALLBACK — accept hardcoded admin credentials
+  // ─────────────────────────────────────────────────────────────
+  if (username === DEMO_ADMIN_USERNAME && password === DEMO_ADMIN_PASSWORD) {
+    adminAttempts = 0;
+    try { sessionStorage.setItem('admin_attempts', '0'); } catch (e) {}
+
+    const icon = document.getElementById('adminModalIcon');
+    icon.className = 'modal-icon success';
+    icon.innerHTML = '<i class="fas fa-check"></i>';
+    document.getElementById('adminModalTitle').textContent = 'Access Granted';
+    document.getElementById('adminModalText').textContent =
+      'Backend offline. Redirecting to admin panel…';
+
+    logAdminAccess(`Admin login (offline): ${username}`);
+
+    setTimeout(() => {
+      window.location.href = ADMIN_PANEL_PATH;
+    }, 900);
+    return;
+  }
+
+  // Wrong credentials offline
+  adminAttempts++;
+  try { sessionStorage.setItem('admin_attempts', String(adminAttempts)); } catch (e) {}
+
+  const remaining = MAX_ATTEMPTS - adminAttempts;
+  logSuspiciousAttempt(`Failed offline admin attempt #${adminAttempts} (user: ${username})`);
+
+  if (adminAttempts >= MAX_ATTEMPTS) {
+    adminLockedUntil = now + LOCKOUT_MS;
+    try { sessionStorage.setItem('admin_locked_until', String(adminLockedUntil)); } catch (e) {}
+    showIntrusionAlert();
+    showLockedModal(Math.ceil(LOCKOUT_MS / 1000));
+    return;
+  }
+
+  warningEl.innerHTML =
+    `⚠ Invalid credentials. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`;
+
+  passwordEl.value = '';
+  passwordEl.focus();
+  shakeModal();
+  submitBtn.disabled = false;
+  submitBtn.innerHTML = '<i class="fas fa-unlock"></i> Unlock';
 }
 
 /* ═══════════════════════════════════════════════════════════════
    LOCKED / INTRUSION UI
    ═══════════════════════════════════════════════════════════════ */
 function showLockedModal(secondsLeft) {
+  showStep(2);
   const icon = document.getElementById('adminModalIcon');
   icon.className = 'modal-icon locked';
   icon.innerHTML = '<i class="fas fa-lock"></i>';
@@ -1035,7 +1210,7 @@ document.addEventListener('keydown', function(e) {
 });
 
 /* ═══════════════════════════════════════════════════════════════
-   ANIMATIONS (shake, slide)
+   ANIMATIONS
    ═══════════════════════════════════════════════════════════════ */
 const animStyle = document.createElement('style');
 animStyle.textContent = `
@@ -1061,7 +1236,7 @@ function shakeModal() {
   const modal = document.getElementById('adminModal');
   if (!modal) return;
   modal.style.animation = 'none';
-  modal.offsetHeight; // force reflow
+  modal.offsetHeight;
   modal.style.animation = 'shake 0.4s';
 }
 
@@ -1089,7 +1264,7 @@ function updateThemeIcon(theme) {
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   GREETING (after health check succeeds)
+   GREETING
    ═══════════════════════════════════════════════════════════════ */
 function setGreeting() {
   const statusText = document.getElementById('statusText');
@@ -1112,7 +1287,6 @@ document.querySelectorAll('.role-card').forEach(card => {
       localStorage.setItem('selectedRole', role);
       sessionStorage.setItem('selectedRole', role);
     } catch (e) {}
-    // Optional: check if already logged in for this role
     fetch(`${API_BASE}/auth/sessions`, { credentials: 'same-origin' })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
@@ -1143,7 +1317,7 @@ document.querySelectorAll('.role-card').forEach(card => {
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   checkBackendHealth().then(setGreeting);
-  setInterval(checkBackendHealth, 60000); // refresh every minute
+  setInterval(checkBackendHealth, 60000);
 });
 
 /* ═══════════════════════════════════════════════════════════════
