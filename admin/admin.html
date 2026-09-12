@@ -25,7 +25,7 @@
 
     <style>
         /* ═══════════════════════════════════════════════════════
-           ADMIN PANEL v2.1 — Government Access Control Added
+           ADMIN PANEL v2.3 — Dual-mode (backend + offline)
            ═══════════════════════════════════════════════════════ */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
 
@@ -1305,7 +1305,7 @@
         }
     </style>
 
-    <!-- ★ STEP 3 CHANGE: load api.js so admin can talk to backend -->
+    <!-- ★ api.js — bridges frontend <-> backend -->
     <script src="../js/api.js"></script>
 </head>
 <body>
@@ -2289,8 +2289,8 @@
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   SKILLINTEL · SUPER ADMIN PANEL v2.2
-   + Backend-connected login + Government Access
+   SKILLINTEL · SUPER ADMIN PANEL v2.3
+   Dual-mode: Works with OR without backend
    ═══════════════════════════════════════════════════════════════ */
 
 const ADMIN_CREDENTIALS = {
@@ -2305,7 +2305,7 @@ const GOVT_STORAGE_KEY = 'govtOfficials';
 const GOVT_ACTIVITY_KEY = 'govtActivityLog';
 
 /* ═══════════════════════════════════════════════════════════════
-   LOGIN — Backend-first with offline fallback
+   LOGIN — Works with OR without backend
    ═══════════════════════════════════════════════════════════════ */
 async function adminLogin() {
     const user = document.getElementById('adminUser').value.trim();
@@ -2313,26 +2313,36 @@ async function adminLogin() {
     const errorBox = document.getElementById('loginError');
     const errorText = document.getElementById('loginErrorText');
 
+    // ── Validate input ──
     if (!user || !pass) {
         errorText.textContent = 'Please enter both username and password.';
         errorBox.classList.add('show');
         return;
     }
 
+    // ── Lock the button ──
     const btn = document.querySelector('.admin-login-card .login-btn');
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating…';
 
-    try {
-        // ★ BACKEND-FIRST: Try real API
-        if (typeof apiCall === 'function') {
-            const { ok, data } = await apiCall('/api/auth/login', {
+    let backendReachable = false;
+
+    // ─────────────────────────────────────────────────────────
+    // STEP 1: Try backend first
+    // ─────────────────────────────────────────────────────────
+    if (typeof apiCall === 'function') {
+        try {
+            const { ok, status, data } = await apiCall('/api/auth/login', {
                 method: 'POST',
                 body: { username: user, password: pass }
             });
 
-            if (ok && ['super_admin', 'admin', 'verifier'].includes(data.role)) {
+            // Backend responded → it's reachable
+            backendReachable = true;
+
+            // ── SUCCESS ──
+            if (ok && data && ['super_admin', 'admin', 'verifier'].includes(data.role)) {
                 try {
                     sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
                         username: data.username,
@@ -2346,23 +2356,15 @@ async function adminLogin() {
                 logActivity('Admin logged in (backend)', 'success');
                 showPanel();
                 toast(`Welcome back, ${data.full_name || data.username}!`, 'success');
+
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
                 return;
             }
 
-            if (data && data.role && !['super_admin', 'admin', 'verifier'].includes(data.role)) {
-                errorText.textContent = 'This account is not an admin.';
-                errorBox.classList.add('show');
-                setTimeout(() => errorBox.classList.remove('show'), 3000);
-                logSecurityEvent('Non-admin attempted login', `user=${user}`);
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-                return;
-            }
-
-            if (data && data.error) {
-                errorText.textContent = data.error;
+            // ── Backend rejected (401/403) ──
+            if (status === 401 || status === 403) {
+                errorText.textContent = (data && data.error) || 'Invalid credentials.';
                 errorBox.classList.add('show');
                 setTimeout(() => errorBox.classList.remove('show'), 3000);
                 logSecurityEvent('Failed admin login (backend)', `user=${user}`);
@@ -2370,29 +2372,51 @@ async function adminLogin() {
                 btn.innerHTML = originalHtml;
                 return;
             }
+
+            // ── Backend returned unexpected data (e.g. 404 with a role) ──
+            if (ok && data && data.role && !['super_admin', 'admin', 'verifier'].includes(data.role)) {
+                errorText.textContent = 'This account is not an admin.';
+                errorBox.classList.add('show');
+                setTimeout(() => errorBox.classList.remove('show'), 3000);
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                return;
+            }
+
+            // ── Backend returned 404 / 500 / etc. → treat as offline ──
+            console.warn('Backend returned unexpected status:', status, data);
+            backendReachable = false;
+
+        } catch (err) {
+            console.warn('Backend unreachable, using offline check:', err);
+            backendReachable = false;
         }
-    } catch (err) {
-        console.warn('Backend unreachable, using offline check:', err);
     }
 
-    // ★ OFFLINE FALLBACK: hardcoded credentials
-    if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
-        try {
-            sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
-                username: user,
-                loginAt: new Date().toISOString()
-            }));
-        } catch (e) {}
+    // ─────────────────────────────────────────────────────────
+    // STEP 2: OFFLINE FALLBACK
+    // ─────────────────────────────────────────────────────────
+    if (!backendReachable) {
+        if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
+            try {
+                sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+                    username: user,
+                    full_name: ADMIN_CREDENTIALS.displayName,
+                    role: 'super_admin',
+                    loginAt: new Date().toISOString()
+                }));
+            } catch (e) {}
 
-        logAudit('Admin Login', 'Successful login (offline fallback)');
-        logActivity('Admin logged in (offline mode)', 'success');
-        showPanel();
-        toast(`Welcome back, ${ADMIN_CREDENTIALS.displayName}! (offline)`, 'success');
-    } else {
-        logSecurityEvent('Failed admin login attempt', `Username: ${user}`);
-        errorText.textContent = 'Invalid admin credentials. Please try again.';
-        errorBox.classList.add('show');
-        setTimeout(() => errorBox.classList.remove('show'), 3000);
+            logAudit('Admin Login', 'Successful login (offline fallback)');
+            logActivity('Admin logged in (offline mode)', 'success');
+            showPanel();
+            toast(`Welcome back, ${ADMIN_CREDENTIALS.displayName}! (offline)`, 'success');
+        } else {
+            logSecurityEvent('Failed admin login attempt', `Username: ${user}`);
+            errorText.textContent = 'Invalid admin credentials. Please try again.';
+            errorBox.classList.add('show');
+            setTimeout(() => errorBox.classList.remove('show'), 3000);
+        }
     }
 
     btn.disabled = false;
@@ -2401,7 +2425,6 @@ async function adminLogin() {
 
 function adminLogout() {
     if (!confirm('Are you sure you want to logout?')) return;
-    // Try backend logout (fire and forget)
     try {
         if (typeof apiCall === 'function') {
             apiCall('/api/auth/logout', { method: 'POST' }).catch(() => {});
@@ -2494,8 +2517,7 @@ function initPanel() {
     renderActivityFeed();
     renderGovtOfficials();
     renderGovtActivityLog();
-    // ★ NEW: fetch officials from backend
-    loadGovtOfficialsFromBackend();
+    loadGovtOfficialsFromBackend();  // fetch fresh from server if online
     updateCounts();
     updateNotifBadge();
     updateThemeIcon();
@@ -3482,7 +3504,7 @@ function openAddGovtOfficialModal() {
     `);
 }
 
-/* ★ STEP 3 CHANGE: saveGovtOfficial is now async + backend-first */
+/* Dual-mode: backend-first, localStorage fallback */
 async function saveGovtOfficial() {
     const fullName = document.getElementById('govtFullName').value.trim();
     const officialId = document.getElementById('govtOfficialId').value.trim();
@@ -3503,10 +3525,10 @@ async function saveGovtOfficial() {
         return;
     }
 
-    // ★ Try backend first
+    // Try backend first
     if (typeof apiCall === 'function') {
         try {
-            const { ok, data } = await apiCall('/api/admin/govt-officials', {
+            const { ok, status, data } = await apiCall('/api/admin/govt-officials', {
                 method: 'POST',
                 body: {
                     officialId, fullName, email, mobile, department,
@@ -3528,23 +3550,25 @@ async function saveGovtOfficial() {
             }
 
             // Backend rejected
-            if (data && data.error) {
-                toast(data.error, 'error');
+            if (status === 401 || status === 403 || status === 409) {
+                toast((data && data.error) || 'Could not create official', 'error');
                 return;
             }
+
+            // Anything else (404, 500, etc.) → fall through to offline
+            console.warn('Backend rejected or unavailable, using offline save:', status, data);
         } catch (err) {
             console.warn('Backend unreachable, saving to localStorage:', err);
         }
     }
 
-    // ★ OFFLINE FALLBACK
+    // OFFLINE FALLBACK
     saveGovtOfficialOffline({
         fullName, officialId, email, mobile, department,
         accessLevel, region, expiresAt, password
     });
 }
 
-/* ★ NEW: offline fallback for saveGovtOfficial */
 function saveGovtOfficialOffline(official) {
     const officials = getGovtOfficials();
     if (officials.find(o => o.email.toLowerCase() === official.email.toLowerCase())) {
@@ -3588,7 +3612,6 @@ function saveGovtOfficialOffline(official) {
     toast(`Official created (offline): ${newOfficial.officialId}`, 'success');
 }
 
-/* ★ NEW: fetch officials from backend and cache in localStorage */
 async function loadGovtOfficialsFromBackend() {
     if (typeof apiCall !== 'function') return;
     try {
@@ -3608,7 +3631,6 @@ async function loadGovtOfficialsFromBackend() {
                 loginCount: o.login_count || 0,
                 createdAt: o.created_at,
                 createdBy: o.created_by
-                // Note: password intentionally NOT included — backend never exposes it
             }));
             localStorage.setItem(GOVT_STORAGE_KEY, JSON.stringify(mapped));
             renderGovtOfficials();
