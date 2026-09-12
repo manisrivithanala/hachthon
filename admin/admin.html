@@ -4655,7 +4655,97 @@ function updateThemeIcon() {
     const theme = document.documentElement.getAttribute('data-theme') || 'light';
     btn.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
 }
+/* ═══════════════════════════════════════════════════════════════
+   EXPOSE FUNCTIONS TO GLOBAL SCOPE
+   Ensures onclick handlers in HTML always find these functions
+   ═══════════════════════════════════════════════════════════════ */
+window.adminLogin = adminLogin;
+window.adminLogout = adminLogout;
+window.toggleAdminPass = toggleAdminPass;
+window.switchModule = switchModule;
+window.toggleAdminSidebar = toggleAdminSidebar;
+window.filterSidebar = filterSidebar;
+window.openGlobalSearch = openGlobalSearch;
+window.closeGlobalSearch = closeGlobalSearch;
+window.performGlobalSearch = performGlobalSearch;
+window.closeModal = closeModal;
+window.toggleTheme = toggleTheme;
+window.exportAllData = exportAllData;
+window.confirmClearAll = confirmClearAll;
+window.showAdminProfile = showAdminProfile;
+window.showNotifications = showNotifications;
+window.openAddUserModal = openAddUserModal;
+window.saveNewUser = saveNewUser;
+window.deleteUser = deleteUser;
+window.renderUsers = renderUsers;
+window.sendNotification = sendNotification;
+window.generateReport = generateReport;
+window.saveSettings = saveSettings;
+window.refreshAll = refreshAll;
+window.openAddGovtOfficialModal = openAddGovtOfficialModal;
+window.saveGovtOfficial = saveGovtOfficial;
+window.resetUserPassword = resetUserPassword;
+window.startOnboardingTour = startOnboardingTour;
+window.nextTourStep = nextTourStep;
+window.closeTour = closeTour;
+window.viewUser = viewUser;
+window.editUser = editUser;
+window.toggleUserStatus = toggleUserStatus;
+window.approveUser = approveUser;
+window.rejectUser = rejectUser;
+window.viewGovtOfficial = viewGovtOfficial;
+window.editGovtOfficial = editGovtOfficial;
+window.updateGovtOfficial = updateGovtOfficial;
+window.toggleGovtStatus = toggleGovtStatus;
+window.deleteGovtOfficial = deleteGovtOfficial;
+window.exportGovtOfficials = exportGovtOfficials;
+window.clearGovtActivityLog = clearGovtActivityLog;
+window.regenerateAIInsights = regenerateAIInsights;
+window.clearActivityFeed = clearActivityFeed;
+window.clearAuditLogs = clearAuditLogs;
+window.clearSecurityLogs = clearSecurityLogs;
+window.addAnnouncement = addAnnouncement;
+window.saveAnnouncement = saveAnnouncement;
+window.deleteAnnouncement = deleteAnnouncement;
+window.openAddProgramModal = openAddProgramModal;
+window.saveProgram = saveProgram;
+window.deleteProgram = deleteProgram;
+window.editProgram = editProgram;
+window.importData = importData;
+window.exportData = exportData;
+window.copyToClipboard = copyToClipboard;
+window.deleteUser = deleteUser;
+window.saveUserEdit = saveUserEdit;
+window.downloadReport = downloadReport;
+window.handleSearchSelect = handleSearchSelect;
+window.skipTour = skipTour;
+window.prevTourStep = prevTourStep;
+window.finishTour = finishTour;
+window.logAudit = logAudit;
+window.logActivity = logActivity;
+window.logSecurityEvent = logSecurityEvent;
+window.logGovtActivity = logGovtActivity;
+window.toast = toast;
+window.getGovtOfficials = getGovtOfficials;
+window.saveGovtOfficials = saveGovtOfficials;
+window.generateOfficialId = generateOfficialId;
+window.generateGovtPassword = generateGovtPassword;
+window.isExpired = isExpired;
+window.renderGovtStats = renderGovtStats;
+window.renderGovtOfficials = renderGovtOfficials;
+window.renderGovtActivityLog = renderGovtActivityLog;
+window.updateCounts = updateCounts;
+window.updateNotifBadge = updateNotifBadge;
+window.updateThemeIcon = updateThemeIcon;
+window.generateTempPassword = generateTempPassword;
+window.getAllUsers = getAllUsers;
+window.getData = getData;
+window.initPanel = initPanel;
 
+console.log('%c[SKILLINTEL Admin] Script loaded successfully',
+    'color: #22c55e; font-weight: bold; font-size: 14px;');
+console.log('[SKILLINTEL Admin] Test: typeof adminLogin =', typeof adminLogin);
+console.log('[SKILLINTEL Admin] Username:', ADMIN_CREDENTIALS.username);
 if (typeof window.toggleTheme !== 'function') {
     window.toggleTheme = function() {
         const html = document.documentElement;
